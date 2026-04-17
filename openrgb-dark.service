@@ -1,11 +1,14 @@
 [Unit]
 Description=OpenRGB Dark Controller
-After=network.target openrgb.service
+After=network.target openrgb.service graphical-session.target
+Requires=graphical-session.target
+PartOf=graphical-session.target
 
 [Service]
 ExecStart=%h/.local/bin/openrgb-dark-controller
 Environment="TIMEOUT=30"
 Restart=always
+RestartSec=5
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target

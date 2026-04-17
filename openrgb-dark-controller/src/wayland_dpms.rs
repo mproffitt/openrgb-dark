@@ -211,6 +211,17 @@ impl Dispatch<zwlr_output_power_v1::ZwlrOutputPowerV1, ()> for DpmsData {
 // -- Event loop --
 
 fn run(tx: mpsc::UnboundedSender<ScreenPowerState>) -> Result<()> {
+    if std::env::var_os("WAYLAND_DISPLAY").is_none()
+        && std::env::var_os("WAYLAND_SOCKET").is_none()
+    {
+        info!("No Wayland session detected (WAYLAND_DISPLAY unset); skipping Wayland DPMS monitor");
+        // Park forever to keep `tx` alive; otherwise the main select!'s dpms branch
+        // sees a closed channel and exits the event loop.
+        loop {
+            std::thread::park();
+        }
+    }
+
     let conn = Connection::connect_to_env()
         .context("Failed to connect to Wayland compositor")?;
 
@@ -275,7 +286,10 @@ pub fn start(tx: mpsc::UnboundedSender<ScreenPowerState>) {
         .name("wayland-dpms".into())
         .spawn(move || {
             if let Err(e) = run(tx) {
-                error!("Wayland DPMS monitor: {:#}", e);
+                error!("Wayland DPMS monitor failed: {:#}", e);
+                // Exit non-zero so systemd (Restart=always) brings us back up,
+                // rather than leaving the service "active" with a dead DPMS thread.
+                std::process::exit(1);
             }
         })
         .expect("Failed to spawn Wayland DPMS thread");
